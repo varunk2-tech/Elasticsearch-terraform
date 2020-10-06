@@ -1,0 +1,76 @@
+---
+- hosts: all
+  remote_user: admin
+  become: yes
+  gather_facts: yes
+  become_method: sudo
+  tasks:
+  - name: get apt repo key
+    apt_key:
+      url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+      state: present
+      validate_certs: no
+      #      become_user: root
+      # become: yes
+#  - name: Remove apt lock file
+#    file:
+#      state: absent
+#      path: "/var/lib/dpkg/lock"
+#    become: true
+#    tags: apt
+  
+  - name: Wait for APT Lock      
+    shell:  while fuser /var/lib/dpkg/lock >/dev/null 2>&1; do sleep 5; done;    
+
+  - name: install apt repo
+    apt_repository:
+      repo: deb https://artifacts.elastic.co/packages/6.x/apt stable main
+      state: present
+      filename: elastic-6.x.list
+      update_cache: yes
+
+  - name: install java
+    apt:
+      name: openjdk-8-jre
+      state: present
+      update_cache: yes
+
+  - name: install elasticsearch
+    apt:
+      name: elasticsearch
+      state: present
+      update_cache: yes
+
+  - name: reload systemd config
+    systemd:
+      state: started
+      name: elasticsearch 
+      daemon_reload: yes
+
+  - name: Updating the config file to restrict outside access
+    lineinfile:
+      destfile: /etc/elasticsearch/elasticsearch.yml
+      regexp: 'network.host:'
+      line: 'network.host: 0.0.0.0'
+
+  - name: Updating the config file to restrict outside access
+    lineinfile:
+      destfile: /etc/elasticsearch/elasticsearch.yml
+      regexp: 'http.port:'
+      line: 'http.port: 9200'
+
+# Restart Elasticsearch
+  
+  - name: Restarting Elasticsearch
+    service:
+      name: elasticsearch
+      state: restarted
+
+  - name: enable service elasticsearch and ensure it is not masked
+    systemd:
+      name: elasticsearch
+      enabled: yes
+      masked: no
+
+  - name: ensure elasticsearch is running
+    systemd: state=started name=elasticsearch
